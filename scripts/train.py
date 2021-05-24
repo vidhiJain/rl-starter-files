@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser()
 
 ## General parameters
 parser.add_argument("--algo", required=True,
-                    help="algorithm to use: a2c | ppo (REQUIRED)")
+                    help="algorithm to use: a2c | ppo | pposhapl1loss | pposhapl1rew (REQUIRED)")
 parser.add_argument("--env", required=True,
                     help="name of the environment to train on (REQUIRED)")
 parser.add_argument("--model", default=None,
@@ -61,7 +61,12 @@ parser.add_argument("--recurrence", type=int, default=1,
                     help="number of time-steps gradient is backpropagated (default: 1). If > 1, a LSTM is added to the model to have memory.")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model to handle text input")
-
+parser.add_argument("--top_down", action="store_true", default=False,
+                    help="add a GRU to the model to handle text input")
+parser.add_argument("--shap_coeff", type=float, default=0.2,
+                    help="shap reward coeff with loss ")
+parser.add_argument("--shap_loss_interval", type=float, default=0.2,
+                    help="shap reward coeff with loss ")
 args = parser.parse_args()
 
 args.mem = args.recurrence > 1
@@ -98,7 +103,7 @@ txt_logger.info(f"Device: {device}\n")
 
 envs = []
 for i in range(args.procs):
-    envs.append(utils.make_env(args.env, args.seed + 10000 * i))
+    envs.append(utils.make_env(args.env, args.seed + 10000 * i, args.top_down))
 txt_logger.info("Environments loaded\n")
 
 # Load training status
@@ -135,6 +140,16 @@ elif args.algo == "ppo":
     algo = torch_ac.PPOAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
+elif args.algo == "pposhapl1loss":
+    algo = torch_ac.PPOSHAPL1lossAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+                            args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
+                            args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss, 
+                            shap_loss_interval=args.shap_loss_interval, shap_coeff=args.shap_coeff)
+elif args.algo == "pposhapl1rew":
+    algo = torch_ac.PPOSHAPL1rewAlgo(envs, acmodel, device, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+                            args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
+                            args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss, 
+                            shap_loss_interval=args.shap_loss_interval, shap_coeff=args.shap_coeff)
 else:
     raise ValueError("Incorrect algorithm name: {}".format(args.algo))
 
@@ -178,9 +193,19 @@ while num_frames < args.frames:
         header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]
         data += [logs["entropy"], logs["value"], logs["policy_loss"], logs["value_loss"], logs["grad_norm"]]
 
-        txt_logger.info(
-            "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f}"
-            .format(*data))
+        if args.algo in ["pposhapl1loss", "pposhapl1rew"]:
+            header += ["shap_" + key for key in return_per_episode.keys()]
+            data += utils.synthesize(exps.shap_reward.cpu().numpy()).values()
+            header += ["shap_coeff"]
+            data += [logs['shap_coeff']]                
+            txt_logger.info(
+                "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f} | shapR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | shap_coeff: {:.2f}"
+                .format(*data))
+        else:
+            txt_logger.info(
+                "U {} | F {:06} | FPS {:04.0f} | D {} | rR:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσmM {:.1f} {:.1f} {} {} | H {:.3f} | V {:.3f} | pL {:.3f} | vL {:.3f} | ∇ {:.3f}"
+                .format(*data))
+
 
         header += ["return_" + key for key in return_per_episode.keys()]
         data += return_per_episode.values()

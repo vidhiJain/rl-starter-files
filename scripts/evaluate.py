@@ -27,6 +27,8 @@ parser.add_argument("--memory", action="store_true", default=False,
                     help="add a LSTM to the model")
 parser.add_argument("--text", action="store_true", default=False,
                     help="add a GRU to the model")
+parser.add_argument("--top_down", action="store_true", default=False,
+                    help="add a GRU to the model to handle text input")
 args = parser.parse_args()
 
 # Set seed for all randomness sources
@@ -101,6 +103,11 @@ print("F {} | FPS {:.0f} | D {} | R:μσmM {:.2f} {:.2f} {:.2f} {:.2f} | F:μσm
       .format(num_frames, fps, duration,
               *return_per_episode.values(),
               *num_frames_per_episode.values()))
+
+# # write to combined returns per epsiode csv
+# with open('returns_' + args.env, 'a') as f:
+#     f.write('{},{:.2f},{:.2f},{:.2f},{:.2f}\n'.format(args.model[len('DoorKeypposhapcoeff'):], *return_per_episode.values()))
+
 
 # Print worst episodes
 
