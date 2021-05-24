@@ -1,7 +1,6 @@
-
-# 
-# 
-# # read the log.txt and extract the rewards per episode?
+# INCOMPLETE
+# uncomment the evaluate script
+# # read the log.txt and extract the rewards per episode
 
 # script to run the models for eval for 1000 episodes
 import matplotlib.pyplot as plt
